@@ -40,7 +40,7 @@
 ;;         | (! <peg>)
 ;;         | (& <peg>)
 ;;         | (drop <peg>)
-
+;;         | (range-primary <peg> <min> <max>)
 
 ;;;;
 ;; pegvm registers and dynamic control
@@ -101,7 +101,7 @@
            (cons item (replicate (sub1 n) item))))
 
 (define-for-syntax (peg-names exp)
-  (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop)
+  (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop range-primary)
     [(and e1) (peg-names #'e1)]
     [(and e1 e2) (append (peg-names #'e1) (peg-names #'e2))]
     [(and e1 e2 . e3) (append (peg-names #'e1) (peg-names #'(and e2 . e3)))]
@@ -111,6 +111,7 @@
     [(? e1 ...) (peg-names #'(and e1 ...))]
     [(name nm subexp) (cons #'nm (peg-names #'subexp))]
     [(drop e1 ...) (peg-names #'(and e1 ...))]
+    [(range-primary e min max) (peg-names #'e1)]
     [else '()]))
 
 (define-for-syntax (peg-compile exp sk)
@@ -124,22 +125,14 @@
                          (sk (peg-result (char->string x))))
                   (pegvm-fail))))))
   (with-syntax ([sk sk])
-    (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop
-                              $or range-primary)
+    (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop range-primary
+                              $or)
       [(epsilon)
        #'(sk empty-sequence)]
       [(char c)
        (single-char-pred #'sk #'x #'(char=? c x))]
       [(any-char)
        (single-char-pred #'sk #'x #t)]
-      [(range-primary k min max)
-         (with-syntax ([min (datum->syntax #'min (syntax->symbol #'min))]
-		       [k (datum->syntax #'k (syntax->symbol #'k))])
-           (peg-compile (cons 'and
-                 (append
-                  (for/list ((i (range 0 'min)))
-                    k)
-                  (foldr (lambda (a b) `(? (and ,a (? ,b)))) k (replicate (- max min) k)))) #'sk))]
       [(range c1 c2)
        (single-char-pred #'sk #'x #'(char-between? x c1 c2))]
       [(string str)
@@ -233,6 +226,20 @@
              p))]
       [(drop e1 e2 ...)
        (peg-compile #'(drop (and e1 e2 ...)) #'sk)]
+      [(range-primary k min max)
+       (unless (and (>= min 0)
+		    (>= max 0)
+		    (<= min max)
+		    (< max 64))
+	 (raise-syntax-error "invalid bounds on range" (list min max)))
+       ;;
+       ;; until min = 0
+       ;; recursively read 'k' once and loop with min-1
+       ;; once min = 0
+       ;; recursive read optional 'k's and loop with max=0
+       ;; until max = 0 then we're done.
+       ;;
+       (peg-compile #'k #'sk)]
       [(& e) (peg-compile #'(! (! e)) #'sk)]
       [_ (let ((shorthand (syntax-e exp)))
            (cond ((char? shorthand) (peg-compile #`(char #,exp) #'sk))
