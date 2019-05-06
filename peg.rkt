@@ -125,7 +125,7 @@
                   (pegvm-fail))))))
   (with-syntax ([sk sk])
     (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop
-                              $or)
+                              $or range-primary)
       [(epsilon)
        #'(sk empty-sequence)]
       [(char c)
@@ -133,12 +133,13 @@
       [(any-char)
        (single-char-pred #'sk #'x #t)]
       [(range-primary k min max)
-         (with-syntax ([min (syntax->datum #'min)])
-           #'(cons 'and
+         (with-syntax ([min (datum->syntax #'min (syntax->symbol #'min))]
+		       [k (datum->syntax #'k (syntax->symbol #'k))])
+           (peg-compile (cons 'and
                  (append
-                  (for/list ((i (range 0 min)))
+                  (for/list ((i (range 0 'min)))
                     k)
-                  (foldr (lambda (a b) `(? (and ,a (? ,b)))) k (replicate (- max min) k)))))]
+                  (foldr (lambda (a b) `(? (and ,a (? ,b)))) k (replicate (- max min) k)))) #'sk))]
       [(range c1 c2)
        (single-char-pred #'sk #'x #'(char-between? x c1 c2))]
       [(string str)
