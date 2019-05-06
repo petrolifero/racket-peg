@@ -95,6 +95,11 @@
 ;;;;
 ;; peg compiler
 
+(define (replicate n item)
+       (if (equal? n 0)
+           '()
+           (cons item (replicate (sub1 n) item))))
+
 (define-for-syntax (peg-names exp)
   (syntax-case exp (epsilon char any-char range string and or * + ? call name ! drop)
     [(and e1) (peg-names #'e1)]
@@ -127,6 +132,13 @@
        (single-char-pred #'sk #'x #'(char=? c x))]
       [(any-char)
        (single-char-pred #'sk #'x #t)]
+      [(range-primary k min max)
+         (with-syntax ([min (syntax->datum #'min)])
+           #'(cons 'and
+                 (append
+                  (for/list ((i (range 0 min)))
+                    k)
+                  (foldr (lambda (a b) `(? (and ,a (? ,b)))) k (replicate (- max min) k)))))]
       [(range c1 c2)
        (single-char-pred #'sk #'x #'(char-between? x c1 c2))]
       [(string str)

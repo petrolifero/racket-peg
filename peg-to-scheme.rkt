@@ -78,6 +78,9 @@
      ((lambda (x) (if extra? `(,extra? ,x) x))
       prim)))
   (match p
+    (`(expression ,k (range "{" ,min "," ,max "}"))
+     `(range-primary ,(peg->scheme:primary k) ,min ,max))
+     
     (`(expression (name . ,n) . ,rest)
       `(name ,(string->symbol n) ,(peg->scheme:expression `(expression . ,rest))))
     (`(expression ,prim)
